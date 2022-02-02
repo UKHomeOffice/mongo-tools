@@ -1,0 +1,15 @@
+FROM centos:8
+
+RUN yum -y update
+RUN yum -y install git-core vim-enhanced golang krb5-devel krb5-libs snappy
+
+RUN groupadd -r app -g 1000 && \
+    useradd -r -g app -u 1000 app -d /app && \
+    mkdir -p /app && \
+    chown -R app:app /app
+
+USER 1000
+
+WORKDIR /app
+
+ENTRYPOINT /bin/bash
