@@ -1,5 +1,37 @@
-MongoDB Tools
+MongoDB Tools (ACP Variant)
 ===================================
+
+This is a modified copy of the mongo tools (mongodump, mongorestore) which is compatible
+the (legacy) certificates used by https://github.com/UKHomeOffice/cfssl-sidekick
+
+Mongodump and other tools were originally written in C++ and part of the Mongo packages.
+In Version 4.2 they were rewritten in go lang and that's what's introduced these back
+compatability issues.
+
+Whilst patching database backup tools raises concern, it is preferable in the short term
+to move us from Mongo 3.6 to Mongo 5. It can recieve security updates without downtime
+and confidence in our existing configuration is valid. Our environment relies on x509
+security certificates for authorisation and we have many clients. This solution
+gives us time to plan the downtime associated with changing our certificates etc.
+
+When upgrading above Mongo 5 care should be taken to ensure a version of mongodump and
+mongorestore are tested. This codebase was forked from v5.0.5.
+
+To simplify building the binaries a new dockerfile has been provided that contains the
+go build tools.
+
+The specific patches we address in this fork are:
+
+A bug where a PEM file has intermediate certificates and isn't read correctly.
+
+* https://jira.mongodb.org/browse/GODRIVER-1753
+* https://github.com/mongodb/mongo-go-driver/pull/521/files
+
+A bug where openssl leaves trailing data at the end of the file.
+
+* https://github.com/golang/go/issues/40545
+
+Tools inside
 
  - **bsondump** - _display BSON files in a human-readable format_
  - **mongoimport** - _Convert data from JSON, TSV or CSV and insert them into a collection_
@@ -9,64 +41,33 @@ MongoDB Tools
  - **mongofiles** - _Read, write, delete, or update files in [GridFS](http://docs.mongodb.org/manual/core/gridfs/)_
  - **mongotop** - _Monitor read/write activity on a mongo server_
 
-
 Report any bugs, improvements, or new feature requests at https://jira.mongodb.org/browse/TOOLS
 
 Building Tools
 ---------------
 
-We currently build the tools with Go version 1.15. Other Go versions may work but they are untested.
+This modified copy of the app includes a Dockerfile.build file, allowing you to build the binaries
+using a docker container with the go lang tools.
 
-Using `go get` to directly build the tools will not work. To build them, it's recommended to first clone this repository:
+Simply follow these steps to build a "build environment", then use docker run and a new script
+to build the apps. This will create a bin/ directory if it doesn't exist with the binaries inside.
 
 ```
 git clone https://github.com/mongodb/mongo-tools
 cd mongo-tools
+docker build -t mongo-tools-build -f Dockerfile.build .
+docker run -itv "$PWD:/app" mongo-tools-build
+bash> /app/acp-build-patched-apps.sh
 ```
 
-Then run `./make build` to build all the tools, placing them in the `bin` directory inside the repository.
+For more information see the README.md for the upstream project.
 
-You can also build a subset of the tools using the `-tools` option. For example, `./make build -tools=mongodump,mongorestore` builds only `mongodump` and `mongorestore`.
+https://github.com/mongodb/mongo-tools/
 
-To use the build/test scripts in this repository, you **_must_** set GOROOT to your Go root directory. This may depend on how you installed Go.
+Pipeline and usage
+------------------
+There are "proper" and comprehensive ways of packaging binaries like these. Binaries only work in the right environment with the right dependencies. (See Dockerfile.build). An ideal solution might be to compile this code and produce a docker image that contains the Mongo 5 dependencies with these binaries also included. Then our database and dbtools images could use that docker image as their base image.
 
-```
-export GOROOT=/usr/local/go
-```
+However given the small amount of investment we expect to make to these tools, it seems easier to check-in the binaries to git as they only amount to 55MB and ship them on the dbtools image instead. This repo is here, more to provide the transparency of where our binaries come from, rather than being a new pipeline that needs maintaining.
 
-Updating Dependencies
----------------
-Starting with version 100.3.1, the tools use `go mod` to manage dependencies. All dependencies are listed in the `go.mod` file and are directly vendored in the `vendor` directory.
-
-In order to make changes to dependencies, you first need to change the `go.mod` file. You can manually edit that file to add/update/remove entries, or you can run the following in the repository directory:
-
-```
-go mod edit -require=<package>@<version>  # for adding or updating a dependency
-go mod edit -droprequire=<package>        # for removing a dependency
-```
-
-Then run `go mod vendor -v` to reconstruct the `vendor` directory to match the changed `go.mod` file.
-
-Optionally, run `go mod tidy -v` to ensure that the `go.mod` file matches the `mongo-tools` source code.
-
-Contributing
----------------
-See our [Contributor's Guide](CONTRIBUTING.md).
-
-Documentation
----------------
-See the MongoDB packages [documentation](https://docs.mongodb.org/database-tools/).
-
-For documentation on older versions of the MongoDB, reference that version of the [MongoDB Server Manual](docs.mongodb.com/manual):
-
-- [MongoDB 4.2 Tools](https://docs.mongodb.org/v4.2/reference/program)
-- [MongoDB 4.0 Tools](https://docs.mongodb.org/v4.0/reference/program)
-- [MongoDB 3.6 Tools](https://docs.mongodb.org/v3.6/reference/program)
-
-Adding New Platforms Support
----------------
-See our [Adding New Platform Support Guide](PLATFORMSUPPORT.md).
-
-Vendoring the Change into Server Repo
----------------
-See our [Vendor the Change into Server Repo](SERVERVENDORING.md).
+[These mongo binaries are available here](https://github.com/UKHomeOffice/mongo-tools/blob/master/bin.tgz)
