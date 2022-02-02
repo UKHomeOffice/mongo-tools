@@ -246,14 +246,20 @@ func addClientCertFromBytes(cfg *tls.Config, data []byte, keyPasswd string) (str
 
 	cfg.Certificates = append(cfg.Certificates, cert)
 
-	// The documentation for the tls.X509KeyPair indicates that the Leaf certificate is not
-	// retained.
-	crt, err := x509.ParseCertificate(certDecodedBlock)
-	if err != nil {
-		return "", err
-	}
-
-	return crt.Subject.String(), nil
+        // fixes asn1: trailing data bug
+        // golang ssl devs hates trailing data, so recursively strip
+        // of the last byte of the cert until it accepts it
+        l := len(certDecodedBlock)
+        for {
+          crt, err := x509.ParseCertificate(certDecodedBlock[0:l])
+          if err == nil {
+            return crt.Subject.String(), nil
+          }
+          l = l - 1
+          if l == 0 {
+            return "", err
+          }
+        }
 }
 
 // create a username for x509 authentication from an x509 certificate subject.
