@@ -62,7 +62,11 @@ bash> /app/acp-build-patched-apps.sh
 
 For more information see the README.md for the upstream project.
 
+<<<<<<< HEAD
 https://github.com/mongodb/mongo-tools/
+=======
+You can also build a subset of the tools using the `-pkgs` option. For example, `./make build -pkgs=mongodump,mongorestore` builds only `mongodump` and `mongorestore`.
+>>>>>>> upstream-master
 
 Pipeline and usage
 ------------------

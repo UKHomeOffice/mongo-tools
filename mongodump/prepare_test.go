@@ -9,6 +9,7 @@ package mongodump
 import (
 	"testing"
 
+	"github.com/mongodb/mongo-tools/common/dumprestore"
 	"github.com/mongodb/mongo-tools/common/testtype"
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -58,9 +59,10 @@ func TestSkipCollection(t *testing.T) {
 }
 
 type testTable struct {
-	db     string
-	coll   string
-	output bool
+	db       string
+	coll     string
+	output   bool
+	dbOption string
 }
 
 func TestShouldSkipSystemNamespace(t *testing.T) {
@@ -123,18 +125,87 @@ func TestShouldSkipSystemNamespace(t *testing.T) {
 		},
 		{
 			db:     "config",
+			coll:   "system.preimages",
+			output: true,
+		},
+		{
+			db:     "config",
+			coll:   "system.sharding_ddl_coordinators",
+			output: true,
+		},
+		{
+			db:     "config",
 			coll:   "cache.foo",
 			output: true,
 		},
 		{
 			db:     "config",
 			coll:   "foo",
+			output: true,
+		},
+		{
+			db:     "config",
+			coll:   "chunks",
 			output: false,
+		},
+		{
+			db:     "config",
+			coll:   "collections",
+			output: false,
+		},
+		{
+			db:     "config",
+			coll:   "databases",
+			output: false,
+		},
+		{
+			db:     "config",
+			coll:   "settings",
+			output: false,
+		},
+		{
+			db:     "config",
+			coll:   "shards",
+			output: false,
+		},
+		{
+			db:     "config",
+			coll:   "tags",
+			output: false,
+		},
+		{
+			db:     "config",
+			coll:   "version",
+			output: false,
+		},
+		{
+			db:       "config",
+			coll:     "foo",
+			output:   false,
+			dbOption: "config",
+		},
+		{
+			db:       "config",
+			coll:     "chunks",
+			output:   false,
+			dbOption: "config",
 		},
 	}
 
+	for _, collName := range dumprestore.ConfigCollectionsToKeep {
+		tests = append(tests, testTable{
+			db:     "config",
+			coll:   collName,
+			output: false,
+		})
+	}
+
+	md := simpleMongoDumpInstance()
+
 	for _, testVals := range tests {
-		if shouldSkipSystemNamespace(testVals.db, testVals.coll) != testVals.output {
+		md.ToolOptions.DB = testVals.dbOption
+
+		if md.shouldSkipSystemNamespace(testVals.db, testVals.coll) != testVals.output {
 			t.Errorf("%s.%s should have been %v but failed\n", testVals.db, testVals.coll, testVals.output)
 		}
 	}

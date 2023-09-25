@@ -46,18 +46,28 @@ const (
 
 func HasTestType(testType string) bool {
 	envVal := os.Getenv(testType)
-	return envVal == "true"
+	return envVal != ""
 }
 
 // Skip the test if the specified type is not being run.
 func SkipUnlessTestType(t *testing.T, testType string) {
 	if !HasTestType(testType) {
-		t.SkipNow()
+		doSkip(t, testType)
 	}
 }
 
 func SkipUnlessBenchmarkType(b *testing.B, testType string) {
 	if !HasTestType(testType) {
-		b.SkipNow()
+		doSkip(b, testType)
 	}
+}
+
+type skipper interface {
+	Logf(string, ...any)
+	SkipNow()
+}
+
+func doSkip[T skipper](diagger T, testType string) {
+	diagger.Logf("The environment lacks %q; skipping this test …", testType)
+	diagger.SkipNow()
 }
