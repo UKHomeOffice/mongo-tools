@@ -7,7 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+
+	"golang.org/x/mod/semver"
 
 	"github.com/craiggwilson/goke/pkg/git"
 	"github.com/craiggwilson/goke/pkg/sh"
@@ -24,12 +27,42 @@ var pkgNames = []string{
 	"mongostat", "mongotop",
 	"mongofiles",
 	"common",
+	"release",
+}
+
+// minimumGoVersion must be prefixed with v to be parsed by golang.org/x/mod/semver
+var minimumGoVersion = "v1.19.12"
+
+func CheckMinimumGoVersion(ctx *task.Context) error {
+	goVersionStr, err := runCmd(ctx, "go", "version")
+	if err != nil {
+		return fmt.Errorf("failed to get current go version: %w", err)
+	}
+
+	_, _ = ctx.Write([]byte(fmt.Sprintf("Found Go version \"%s\"\n", goVersionStr)))
+
+	versionPattern := `go(\d+\.\d+\.*\d*)`
+
+	r := regexp.MustCompile(versionPattern)
+	goVersionMatches := r.FindStringSubmatch(goVersionStr)
+	if len(goVersionMatches) < 2 {
+		return fmt.Errorf("Could not find version string in the output of `go version`. Output: %s", goVersionStr)
+	}
+
+	// goVersion must be prefixed with v to be parsed by golang.org/x/mod/semver
+	goVersion := fmt.Sprintf("v%s", goVersionMatches[1])
+
+	if semver.Compare(goVersion, minimumGoVersion) < 0 {
+		return fmt.Errorf("Could not find minimum desired Go version. Found %s, Wanted at least %s", goVersion, minimumGoVersion)
+	}
+
+	return nil
 }
 
 // BuildTools is an Executor that builds the tools.
 func BuildTools(ctx *task.Context) error {
 	for _, pkg := range selectedPkgs(ctx) {
-		if pkg != "common" {
+		if pkg != "common" && pkg != "release" {
 			err := buildToolBinary(ctx, pkg, "bin")
 			if err != nil {
 				return err

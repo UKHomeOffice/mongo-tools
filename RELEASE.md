@@ -45,8 +45,6 @@ If you are releasing a patch or minor version but a ticket needs a major bump, s
 The only uncompleted ticket in the release should be the release ticket.
 If there are any remaining tickets that will not be included in this release, remove the fixVersion and assign them a new one if appropriate.
 
-Close the release on JIRA, adding the current date (you may need to ask the TOOLS project manager to do this).
-
 #### Update the release ticket
 Mark the release ticket as "Docs Changes Needed".
 In "Docs Changes Summary", indicate that the release notes will be found in CHANGELOG.md after the release ticket is closed.
@@ -69,12 +67,16 @@ Create an annotated tag and push it:
 git tag -a -m vX.Y.Z X.Y.Z
 git push --tags
 ```
-This should trigger an Evergreen version that can be viewed on the [Database Tools Waterfall](https://evergreen.mongodb.com/waterfall/mongo-tools).
-If it doesn't, you may have to ask the project manager to give you the right permissions to do so.
+It's important to use an _annotated_ tag and not a lightweight tag. A lightweight tag will not have its own metadata and may break the release process.
+Also ensure you are pushing the tag to the `mongodb/mongo-tools` repository and not to your fork.
+If necessary, you may find the correct remote using `git remote -v` and specify it via `git push <remote> --tags`.
+
+Pushing the tag should trigger an Evergreen version that can be viewed on the [Database Tools Waterfall](https://evergreen.mongodb.com/waterfall/mongo-tools).
+If it doesn't, you may have to ask a project manager/lead to give you the right permissions to do so. The permissions needed are evergreen admin and github authorized user.
 
 ##### Set Evergreen Priorities
 Some evergreen variants (particularly zSeries and PowerPC variants) may have a long schedule queue.
-To speed up release tasks, you can set the task priority for any variant to 101 for release candidates and 200 for actual releases.
+To speed up release tasks, you can set the task priority for any variant to 70 for release candidates and 99 for actual releases.
 
 ### Post-Release Tasks
 Complete these tasks after the release builds have completed on evergreen.
@@ -84,7 +86,8 @@ Go to the [Download Center](https://www.mongodb.com/try/download/database-tools)
 Download the package for your OS and confirm that `mongodump --version` prints the correct version.
 
 #### Update Homebrew Tap
-In order to make the latest release available via our Homebrew tap, submit a pull request to [mongodb/homebrew-brew](https://github.com/mongodb/homebrew-brew), updating the [download link and sha256 sum](https://github.com/mongodb/homebrew-brew/blob/4ae91b18eebd313960de85c28d5592a3fa32110a/Formula/mongodb-database-tools.rb#L7-L8).
+In order to make the latest release available via our Homebrew tap, submit a pull request to [mongodb/homebrew-brew](https://github.com/mongodb/homebrew-brew/blob/bb5b57095a892daeb2700f1a9440550f8e87505b/Formula/mongodb-database-tools.rb#L7-L13) for both `x86` and `arm64`.
+You can get the sha256 sum locally using `shasum -a 256 <tools zip file>`.
 
 #### Update the changelog
 
@@ -137,7 +140,8 @@ Bugs and feature requests can be reported in the [Database Tools Jira](https://j
 - Submit a PR with your changes under the release ticket number, and merge once approved.
 
 #### Close Release Ticket
-Move the JIRA ticket tracking this release to the "Closed" state.
+Close the [release on JIRA](https://jira.mongodb.org/projects/TOOLS/versions), adding the current date (you may need to ask the TOOLS project manager to do this).
+Once this is done, move the JIRA ticket tracking this release to the "Closed" state.
 
 #### Ensure Downstream Tickets Created
 Ensure that downstream tickets have been created in the CLOUDP/DOCSP projects and linked to the release ticket.
@@ -145,3 +149,21 @@ Ensure that downstream tickets have been created in the CLOUDP/DOCSP projects an
 #### Announce the release
 Copy your entry from CHANGELOG.md and post it to the [MongoDB Community Forums](https://developer.mongodb.com/community/forums/tags/c/developer-tools/49/database-tools) in the "Developer Tools" section with the tag `database-tools`.
 Also post it in the #mongo-tools slack channel to announce it internally.
+
+### Handling Release Task Failures
+
+Sometimes you may start the release process only to discover that some tasks
+that are part of the release, like `push`, fail. If the fix for these failures
+is to make changes in the repo, you need to partially restart the release
+process. Here are the steps to follow:
+
+1. Cancel the tasks still running for the release in Evergreen.
+2. Fix the issue in the repo and merge the fix to master.
+3. Delete the task from the `origin` remote (GitHub):
+   ```
+   $> git push origin --delete 100.5.4
+   ```
+4. Make a new tag and push it as you do for the normal release process.
+
+Evergreen should kick off a new set of tasks for the release. Then you can
+continue the normal release process from there.

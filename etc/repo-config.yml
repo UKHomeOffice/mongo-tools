@@ -57,14 +57,12 @@ templates:
      </body>
     </html>
 
-
 repos:
-
-####################
-#
-# Community Repos:
-#
-####################
+  ####################
+  #
+  # Community Repos:
+  #
+  ####################
 
   - name: rhel62
     type: rpm
@@ -122,6 +120,22 @@ repos:
       - yum/redhat/8/mongodb-org
       - yum/redhat/8Server/mongodb-org
 
+  - name: rhel83
+    type: rpm
+    edition: org
+    bucket: repo.mongodb.org
+    repos:
+      - yum/redhat/8/mongodb-org
+      - yum/redhat/8Server/mongodb-org
+
+  - name: rhel90
+    type: rpm
+    edition: org
+    bucket: repo.mongodb.org
+    repos:
+      - yum/redhat/9/mongodb-org
+      - yum/redhat/9Server/mongodb-org
+
   - name: amazon
     type: rpm
     edition: org
@@ -135,6 +149,13 @@ repos:
     bucket: repo.mongodb.org
     repos:
       - yum/amazon/2/mongodb-org
+
+  - name: amazon2023
+    type: rpm
+    edition: org
+    bucket: repo.mongodb.org
+    repos:
+      - yum/amazon/2023/mongodb-org
 
   - name: suse11
     type: rpm
@@ -190,6 +211,17 @@ repos:
       - amd64
     repos:
       - apt/debian/dists/buster/mongodb-org
+
+  - name: debian11
+    type: deb
+    code_name: "bullseye"
+    bucket: repo.mongodb.org
+    edition: org
+    component: main
+    architectures:
+      - amd64
+    repos:
+      - apt/debian/dists/bullseye/mongodb-org
 
   - name: debian71
     type: deb
@@ -266,11 +298,24 @@ repos:
     repos:
       - apt/ubuntu/dists/focal/mongodb-org
 
-####################
-#
-# Enterprise Repos:
-#
-####################
+  - name: ubuntu2204
+    type: deb
+    code_name: "jammy"
+    edition: org
+    bucket: repo.mongodb.org
+    component: multiverse
+    architectures:
+      - amd64
+      - i386
+      - arm64
+    repos:
+      - apt/ubuntu/dists/jammy/mongodb-org
+
+  ####################
+  #
+  # Enterprise Repos:
+  #
+  ####################
 
   - name: rhel62
     type: rpm
@@ -328,7 +373,6 @@ repos:
       - yum/redhat/8/mongodb-enterprise
       - yum/redhat/8Server/mongodb-enterprise
 
-
   - name: rhel82
     type: rpm
     edition: enterprise
@@ -336,6 +380,22 @@ repos:
     repos:
       - yum/redhat/8/mongodb-enterprise
       - yum/redhat/8Server/mongodb-enterprise
+
+  - name: rhel83
+    type: rpm
+    edition: enterprise
+    bucket: repo.mongodb.com
+    repos:
+      - yum/redhat/8/mongodb-enterprise
+      - yum/redhat/8Server/mongodb-enterprise
+
+  - name: rhel90
+    type: rpm
+    edition: enterprise
+    bucket: repo.mongodb.com
+    repos:
+      - yum/redhat/9/mongodb-enterprise
+      - yum/redhat/9Server/mongodb-enterprise
 
   - name: amazon
     type: rpm
@@ -350,6 +410,13 @@ repos:
     bucket: repo.mongodb.com
     repos:
       - yum/amazon/2/mongodb-enterprise
+
+  - name: amazon2023
+    type: rpm
+    edition: enterprise
+    bucket: repo.mongodb.com
+    repos:
+      - yum/amazon/2023/mongodb-enterprise
 
   - name: suse11
     type: rpm
@@ -382,6 +449,17 @@ repos:
       - amd64
     repos:
       - apt/debian/dists/buster/mongodb-enterprise
+
+  - name: debian11
+    type: deb
+    edition: enterprise
+    code_name: "bullseye"
+    bucket: repo.mongodb.com
+    component: main
+    architectures:
+      - amd64
+    repos:
+      - apt/debian/dists/bullseye/mongodb-enterprise
 
   - name: debian92
     type: deb
@@ -491,3 +569,16 @@ repos:
       - i386
     repos:
       - apt/ubuntu/dists/focal/mongodb-enterprise
+
+  - name: ubuntu2204
+    type: deb
+    code_name: "jammy"
+    edition: enterprise
+    bucket: repo.mongodb.com
+    component: multiverse
+    architectures:
+      - amd64
+      - i386
+      - arm64
+    repos:
+      - apt/ubuntu/dists/jammy/mongodb-enterprise

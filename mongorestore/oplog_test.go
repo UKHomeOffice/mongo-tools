@@ -629,11 +629,19 @@ func TestShouldIgnoreNamespacee(t *testing.T) {
 			output: true,
 		},
 		{
+			ns:     "config.system.preimages",
+			output: true,
+		},
+		{
 			ns:     "config.transactions",
 			output: true,
 		},
 		{
 			ns:     "config.transaction_coordinators",
+			output: true,
+		},
+		{
+			ns:     "config.system.sharding_ddl_coordinators",
 			output: true,
 		},
 		{

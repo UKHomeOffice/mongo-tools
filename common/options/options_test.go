@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/mongodb/mongo-tools/common/log"
 	"github.com/mongodb/mongo-tools/common/testtype"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/connstring"
 
 	"runtime"
@@ -148,14 +150,14 @@ func TestVerbosityFlag(t *testing.T) {
 }
 
 type uriTester struct {
-	Name                 string
-	CS                   connstring.ConnString
-	OptsIn               *ToolOptions
-	OptsExpected         *ToolOptions
-	WithSSL              bool
-	WithGSSAPI           bool
-	ShouldError          bool
-	ShouldAskForPassword bool
+	Name                     string
+	CS                       connstring.ConnString
+	OptsIn                   *ToolOptions
+	OptsExpected             *ToolOptions
+	WithSSL                  bool
+	WithGSSAPI               bool
+	ShouldError              bool
+	AuthShouldAskForPassword bool
 }
 
 func TestParseAndSetOptions(t *testing.T) {
@@ -430,7 +432,7 @@ func TestParseAndSetOptions(t *testing.T) {
 				ShouldError: false,
 			},
 			{
-				Name: "should ask for password",
+				Name: "should ask for user password",
 				CS: connstring.ConnString{
 					AuthMechanism: "MONGODB-X509",
 					AuthSource:    "",
@@ -462,8 +464,8 @@ func TestParseAndSetOptions(t *testing.T) {
 					Kerberos:       &Kerberos{},
 					enabledOptions: EnabledOptions{Connection: true, URI: true},
 				},
-				ShouldError:          false,
-				ShouldAskForPassword: true,
+				ShouldError:              false,
+				AuthShouldAskForPassword: true,
 			},
 			{
 				Name: "single connect sets 'Direct'",
@@ -640,7 +642,7 @@ func TestParseAndSetOptions(t *testing.T) {
 				So(testCase.OptsIn.Kerberos.Service, ShouldResemble, testCase.OptsExpected.Kerberos.Service)
 				So(testCase.OptsIn.Kerberos.ServiceHost, ShouldResemble, testCase.OptsExpected.Kerberos.ServiceHost)
 				So(testCase.OptsIn.RetryWrites, ShouldResemble, testCase.OptsExpected.RetryWrites)
-				So(testCase.OptsIn.Auth.ShouldAskForPassword(), ShouldEqual, testCase.OptsIn.ShouldAskForPassword())
+				So(testCase.OptsIn.Auth.ShouldAskForPassword(), ShouldEqual, testCase.OptsExpected.Auth.ShouldAskForPassword())
 			}
 		})
 	})
@@ -940,8 +942,8 @@ func TestOptionsParsing(t *testing.T) {
 			{"--sslCAFile", "sslCertificateAuthorityFile", "foo", "bar"},
 			{"--sslCAFile", "tlsCAFile", "foo", "bar"},
 
-			{"--sslPEMKeyFile", "sslClientCertificateKeyFile", "foo", "bar"},
-			{"--sslPEMKeyFile", "tlsCertificateKeyFile", "foo", "bar"},
+			{"--sslPEMKeyFile", "sslClientCertificateKeyFile", "../db/testdata/test-client-pkcs8-unencrypted.pem", "bar"},
+			{"--sslPEMKeyFile", "tlsCertificateKeyFile", "../db/testdata/test-client-pkcs8-unencrypted.pem", "bar"},
 
 			{"--sslPEMKeyPassword", "sslClientCertificateKeyPassword", "foo", "bar"},
 			{"--sslPEMKeyPassword", "tlsCertificateKeyFilePassword", "foo", "bar"},
@@ -1000,11 +1002,11 @@ func TestOptionsParsingForSRV(t *testing.T) {
 	testtype.SkipUnlessTestType(t, testtype.SRVConnectionStringTestType)
 	atlasURI, ok := os.LookupEnv("ATLAS_URI")
 	if !ok {
-		t.Errorf("test requires ATLAS_URI to be set")
+		t.Fatalf("test requires ATLAS_URI to be set")
 	}
 	cs, err := connstring.Parse(atlasURI)
 	if err != nil {
-		t.Errorf("Error parsing ATLAS_URI: %s", err)
+		t.Fatalf("Failed to parse ATLAS_URI (%s): %s", atlasURI, err)
 	}
 
 	Convey("With a list of CLI options and URIs parsing should succeed or fail as expected", t, func() {
@@ -1090,4 +1092,136 @@ func TestDeprecationWarning(t *testing.T) {
 			So(result, ShouldContainSubstring, deprecationWarningSSLAllow)
 		})
 	})
+}
+
+func TestPasswordPrompt(t *testing.T) {
+	testtype.SkipUnlessTestType(t, testtype.UnitTestType)
+
+	pw := "some-password"
+	expectPrompt := regexp.MustCompile(`.*password.*:\n`)
+
+	t.Run("no prompt with user unset", func(t *testing.T) {
+		stderr, cleanupStderr := mockStderr(t)
+		defer cleanupStderr()
+
+		cleanup := mockStdin(t, pw)
+		defer cleanup()
+
+		opts := newTestOpts(t)
+		err := opts.NormalizeOptionsAndURI()
+		require.NoError(t, err)
+
+		prompt, err := ioutil.ReadFile(stderr.Name())
+		require.NoError(t, err)
+		require.Empty(t, string(prompt))
+	})
+
+	t.Run("prompt when user is set and password is not", func(t *testing.T) {
+		stderr, cleanupStderr := mockStderr(t)
+		defer cleanupStderr()
+
+		cleanup := mockStdin(t, pw)
+		defer cleanup()
+
+		opts := newTestOpts(t)
+		opts.Auth.Username = "someuser"
+		err := opts.NormalizeOptionsAndURI()
+		require.NoError(t, err)
+
+		prompt, err := ioutil.ReadFile(stderr.Name())
+		require.NoError(t, err)
+		require.Regexp(t, expectPrompt, string(prompt))
+		require.Equal(t, pw, opts.ConnString.Password)
+	})
+
+	t.Run("prompt when host, port, and user are set but uri is not", func(t *testing.T) {
+		stderr, cleanupStderr := mockStderr(t)
+		defer cleanupStderr()
+
+		cleanup := mockStdin(t, pw)
+		defer cleanup()
+
+		opts := newTestOpts(t)
+		opts.Auth.Username = "someuser"
+		opts.Host = "localhost"
+		opts.Port = "12345"
+		opts.URI = nil
+		err := opts.NormalizeOptionsAndURI()
+		require.NoError(t, err)
+
+		prompt, err := ioutil.ReadFile(stderr.Name())
+		require.NoError(t, err)
+		require.Regexp(t, expectPrompt, string(prompt))
+		require.Equal(t, pw, opts.ConnString.Password)
+	})
+
+	t.Run("prompt when user is set and password is not and mechanism is PLAIN", func(t *testing.T) {
+		stderr, cleanupStderr := mockStderr(t)
+		defer cleanupStderr()
+
+		cleanup := mockStdin(t, pw)
+		defer cleanup()
+
+		opts := newTestOpts(t)
+		opts.Auth.Username = "someuser"
+		opts.Auth.Mechanism = "PLAIN"
+		opts.SSL.UseSSL = true
+		err := opts.NormalizeOptionsAndURI()
+		require.NoError(t, err)
+
+		prompt, err := ioutil.ReadFile(stderr.Name())
+		require.NoError(t, err)
+		require.Regexp(t, expectPrompt, string(prompt))
+		require.Equal(t, pw, opts.ConnString.Password)
+	})
+}
+
+func newTestOpts(t *testing.T) *ToolOptions {
+	enabled := EnabledOptions{Auth: true, Connection: true, URI: true}
+	opts := New("test", "", "", "", true, enabled)
+
+	var err error
+	opts.URI, err = NewURI("mongodb://localhost:12345")
+	require.NoError(t, err)
+
+	return opts
+}
+
+func mockStderr(t *testing.T) (*os.File, func()) {
+	file, err := os.CreateTemp("", "mongo-tools-mock-stderr")
+	require.NoError(t, err)
+
+	oldStderr := os.Stderr
+	os.Stderr = file
+
+	return file, func() {
+		os.Stderr = oldStderr
+		file.Close()
+		rmErr := os.Remove(file.Name())
+		require.NoError(t, rmErr)
+	}
+}
+
+func mockStdin(t *testing.T, content string) func() {
+	file, err := os.CreateTemp("", "mongo-tools-mock-stdin")
+	require.NoError(t, err)
+
+	_, err = file.WriteString(content)
+	require.NoError(t, err)
+
+	err = file.Close()
+	require.NoError(t, err)
+
+	oldStdin := os.Stdin
+
+	file, err = os.Open(file.Name())
+	require.NoError(t, err)
+	os.Stdin = file
+
+	return func() {
+		os.Stdin = oldStdin
+		file.Close()
+		rmErr := os.Remove(file.Name())
+		require.NoError(t, rmErr)
+	}
 }

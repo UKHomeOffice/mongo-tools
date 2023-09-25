@@ -23,7 +23,6 @@ import (
 
 	"github.com/mongodb/mongo-tools/common/log"
 	"github.com/mongodb/mongo-tools/common/options"
-	"github.com/mongodb/mongo-tools/common/password"
 	"github.com/youmark/pkcs8"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -119,15 +118,6 @@ func (sp *SessionProvider) DB(name string) *mongo.Database {
 
 // NewSessionProvider constructs a session provider, including a connected client.
 func NewSessionProvider(opts options.ToolOptions) (*SessionProvider, error) {
-	// finalize auth options, filling in missing passwords
-	if opts.Auth.ShouldAskForPassword() {
-		pass, err := password.Prompt()
-		if err != nil {
-			return nil, fmt.Errorf("error reading password: %v", err)
-		}
-		opts.Auth.Password = pass
-	}
-
 	client, err := configureClient(opts)
 	if err != nil {
 		return nil, fmt.Errorf("error configuring the connector: %v", err)
@@ -138,7 +128,7 @@ func NewSessionProvider(opts options.ToolOptions) (*SessionProvider, error) {
 	}
 	err = client.Ping(context.Background(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("could not connect to server: %v", err)
+		return nil, fmt.Errorf("failed to connect to %s: %v", opts.URI.ParsedConnString(), err)
 	}
 
 	// create the provider
@@ -175,7 +165,8 @@ func addClientCertFromSeparateFiles(cfg *tls.Config, keyFile, certFile, keyPassw
 // containing file and returns the certificate's subject name.
 func addClientCertFromBytes(cfg *tls.Config, data []byte, keyPasswd string) (string, error) {
 	var currentBlock *pem.Block
-	var certBlock, certDecodedBlock, keyBlock []byte
+	var certDecodedBlock []byte
+	var certBlocks, keyBlocks [][]byte
 
 	remaining := data
 	start := 0
@@ -186,13 +177,14 @@ func addClientCertFromBytes(cfg *tls.Config, data []byte, keyPasswd string) (str
 		}
 
 		if currentBlock.Type == "CERTIFICATE" {
-                       tempCertBlock := data[start : len(data)-len(remaining)]
-                       certBlock = append(certBlock, tempCertBlock...) //To handle usecase where multiple certs are present
+			certBlock := data[start : len(data)-len(remaining)]
+			certBlocks = append(certBlocks, certBlock)
+			start += len(certBlock)
 
-                       tempCertEncodedBlock := currentBlock.Bytes
-                       certDecodedBlock = append(certDecodedBlock, tempCertEncodedBlock...)
-
-                       start += len(tempCertBlock)
+			// Use all the cert blocks for the returned Subject string at the end.
+			if len(certDecodedBlock) == 0 {
+				certDecodedBlock = currentBlock.Bytes
+			}
 		} else if strings.HasSuffix(currentBlock.Type, "PRIVATE KEY") {
 			isEncrypted := x509.IsEncryptedPEMBlock(currentBlock) || strings.Contains(currentBlock.Type, "ENCRYPTED PRIVATE KEY")
 			if isEncrypted {
@@ -223,23 +215,25 @@ func addClientCertFromBytes(cfg *tls.Config, data []byte, keyPasswd string) (str
 
 				var encoded bytes.Buffer
 				pem.Encode(&encoded, &pem.Block{Type: currentBlock.Type, Bytes: keyBytes})
-				keyBlock = encoded.Bytes()
+				keyBlock := encoded.Bytes()
+				keyBlocks = append(keyBlocks, keyBlock)
 				start = len(data) - len(remaining)
 			} else {
-				keyBlock = data[start : len(data)-len(remaining)]
+				keyBlock := data[start : len(data)-len(remaining)]
+				keyBlocks = append(keyBlocks, keyBlock)
 				start += len(keyBlock)
 			}
 		}
 	}
 
-	if len(certBlock) == 0 {
+	if len(certBlocks) == 0 {
 		return "", fmt.Errorf("failed to find CERTIFICATE")
 	}
-	if len(keyBlock) == 0 {
+	if len(keyBlocks) == 0 {
 		return "", fmt.Errorf("failed to find PRIVATE KEY")
 	}
 
-	cert, err := tls.X509KeyPair(certBlock, keyBlock)
+	cert, err := tls.X509KeyPair(bytes.Join(certBlocks, []byte("\n")), bytes.Join(keyBlocks, []byte("\n")))
 	if err != nil {
 		return "", err
 	}
@@ -470,7 +464,7 @@ func configureClient(opts options.ToolOptions) (*mongo.Client, error) {
 		}
 
 		var x509Subject string
-		var keyPasswd string
+		keyPasswd := opts.SSL.SSLPEMKeyPassword
 		var err error
 		if cs.SSLClientCertificateKeyPasswordSet && cs.SSLClientCertificateKeyPassword != nil {
 			keyPasswd = cs.SSLClientCertificateKeyPassword()
